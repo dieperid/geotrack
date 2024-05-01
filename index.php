@@ -14,6 +14,30 @@
 <body>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+
+	<!-- PHP code to parse gpx file -->
+	<?php
+	$filePath = 'assets/gpx/file.gpx';
+	$lat = [];
+	$lon = [];
+	$ele = [];
+
+	if (file_exists($filePath)) {
+		$fileInXml = simplexml_load_file($filePath);
+
+		if ($fileInXml->getName() === 'gpx') {
+			foreach ($fileInXml->trk->trkseg->trkpt as $point) {
+				// Récupère les attributs de longitude, latitude et altitude
+				array_push($lat, (float)$point['lat']);
+				array_push($lon, (float)$point['lon']);
+				array_push($ele, (float)$point->ele);
+			}
+		}
+	}
+
+	$latJson = json_encode($lat);
+	?>
+
 	<div id="map">
 		<div class="leaflet-control coordinate"></div>
 	</div>
@@ -24,6 +48,7 @@
 <script>
 	let bearerToken;
 	let gpxUrl;
+	var lat = <?php echo $latJson; ?>;
 
 	// Get the config info
 	fetch('config/config.json')
