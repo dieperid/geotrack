@@ -1,5 +1,7 @@
 let bearerToken;
-let gpxUrl;
+let s3Url;
+let map;
+const fetchInterval = 20000;
 
 const devices = {
     1: {
@@ -12,32 +14,30 @@ const devices = {
     },
 };
 
-// Get the config info
-fetch("config/config.json")
-    .then((response) => response.json())
-    .then((data) => {
+async function loadConfig() {
+    try {
+        const response = await fetch("../config/config.json");
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const data = await response.json();
         bearerToken = data.token;
-        gpxUrl = data.gpx_url;
-    })
-    .catch((err) => console.log(err));
+        s3Url = data.s3_url;
+    } catch (err) {
+        console.error("Error loading config:", err);
+    }
+}
 
-var markerAnt = null;
-var markerDav = null;
-let fetchInterval = 20000;
-var popupAnt = L.popup().setContent("Anthony");
-var popupDav = L.popup().setContent("David");
+async function doesURLExist(url) {
+    return fetch(url, { method: "GET" })
+        .then((response) => {
+            return response.status === 200;
+        })
+        .catch(() => {
+            return false;
+        });
+}
 
-// Map initialization
-var map = L.map("map").setView([46.818188, 8.227512], 8);
-
-// Liste des fichiers GPX à ajouter
-const gpxFiles = [
-    "assets/gpx/file.gpx",
-    "assets/gpx/file2.gpx",
-    "assets/gpx/file3.gpx",
-];
-
-// Fonction pour ajouter un fichier GPX à la carte
 function addGPX(gpxFile) {
     new L.GPX(gpxFile, {
         async: true,
@@ -53,55 +53,92 @@ function addGPX(gpxFile) {
         .addTo(map);
 }
 
-// Ajouter chaque fichier GPX à la carte
-gpxFiles.forEach(addGPX);
+// Fonction pour charger et afficher la carte
+async function initializeMap() {
+    // Map initialization
+    map = L.map("map").setView([46.818188, 8.227512], 8);
 
-//osm layer
-var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-});
-osm.addTo(map);
+    //osm layer
+    var osm = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }
+    );
+    osm.addTo(map);
 
-// google street
-googleStreets = L.tileLayer(
-    "http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-    {
-        subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    // google street
+    googleStreets = L.tileLayer(
+        "http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+        {
+            subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        }
+    );
+
+    //google satellite
+    googleSat = L.tileLayer(
+        "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        {
+            subdomains: ["mt0", "mt1", "mt2", "mt3"],
+        }
+    );
+
+    var baseMaps = {
+        OSM: osm,
+        "Google Street": googleStreets,
+        "Google Satellite": googleSat,
+    };
+
+    L.control.layers(baseMaps).addTo(map);
+
+    /**
+    // Liste des fichiers GPX à ajouter
+    const gpxFiles = [
+        "assets/gpx/file.gpx",
+        "assets/gpx/file2.gpx",
+        "assets/gpx/file3.gpx",
+    ];
+
+    // Ajouter chaque fichier GPX à la carte
+    gpxFiles.forEach(addGPX);
+*/
+
+    map.on("mousemove", function (e) {
+        document.getElementsByClassName("coordinate")[0].innerHTML =
+            "lat: " + e.latlng.lat + " lng: " + e.latlng.lng;
+    });
+
+    if (await doesURLExist(s3Url)) {
+        new L.GPX(s3Url, {
+            async: true,
+            marker_options: {
+                startIconUrl: "assets/img/pin-icon-start.png",
+                endIconUrl: "assets/img/pin-icon-end.png",
+                shadowUrl: "assets/img/pin-shadow.png",
+            },
+        })
+            .on("loaded", function (e) {
+                map.fitBounds(e.target.getBounds());
+            })
+            .addTo(map);
+    } else {
+        console.error("GPX file not found at the specified URL.");
     }
-);
-
-//google satellite
-googleSat = L.tileLayer("http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
-    subdomains: ["mt0", "mt1", "mt2", "mt3"],
-});
-
-var baseMaps = {
-    OSM: osm,
-    "Google Street": googleStreets,
-    "Google Satellite": googleSat,
-};
-
-L.control.layers(baseMaps).addTo(map);
-
-map.on("mousemove", function (e) {
-    document.getElementsByClassName("coordinate")[0].innerHTML =
-        "lat: " + e.latlng.lat + " lng: " + e.latlng.lng;
-});
+}
 
 /**
  * Function to fetch the position from an api call
  */
-function fetchPosition() {
+async function fetchPosition() {
     for (const id in devices) {
         const { username } = devices[id];
 
         fetch(`https://tracking.anthonydieperink.ch/api/devices/${id}`, {
             method: "GET",
-            credentials: "include", // You can use 'include' to include cookies, 'same-origin' for same-origin requests, or 'omit' to exclude credentials.
+            credentials: "include",
             headers: {
-                Authorization: bearerToken, // If using token-based authentication
-                // Add other headers as needed
+                Authorization: bearerToken,
             },
         })
             .then((response) => {
@@ -117,10 +154,9 @@ function fetchPosition() {
                         `https://tracking.anthonydieperink.ch/api/positions?deviceId=${id}`,
                         {
                             method: "GET",
-                            credentials: "include", // You can use 'include' to include cookies, 'same-origin' for same-origin requests, or 'omit' to exclude credentials.
+                            credentials: "include",
                             headers: {
-                                Authorization: bearerToken, // If using token-based authentication
-                                // Add other headers as needed
+                                Authorization: bearerToken,
                             },
                         }
                     )
@@ -153,7 +189,7 @@ function fetchPosition() {
                             console.error("Fetch error:", error);
                         });
                 } else {
-                    map.removeLayer(markerAnt);
+                    map.removeLayer(devices[id].marker);
                 }
             })
             .catch((error) => {
@@ -162,7 +198,11 @@ function fetchPosition() {
     }
 }
 
-window.addEventListener("load", () => {
+async function main() {
+    await loadConfig();
+    await initializeMap();
     fetchPosition();
     setInterval(fetchPosition, fetchInterval);
-});
+}
+
+window.addEventListener("load", main);
