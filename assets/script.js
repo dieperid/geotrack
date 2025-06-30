@@ -14,7 +14,10 @@ let controlElevation;
 let gpxLayers = {};
 
 function initializeMap() {
-    map = L.map('map').setView(defaultCenter, defaultZoom);
+    map = L.map('map', {
+        rotate: true,
+        rotation: 0
+    }).setView(defaultCenter, defaultZoom);
 
     const baseLayers = {
         "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
@@ -133,9 +136,6 @@ async function addGPXToMap(gpxFile) {
 
             updateGPXSelector();
         });
-
-        gpxLayer.addTo(map);
-
     } catch (error) {
         console.error(`Erreur lors du chargement de ${gpxFile}:`, error);
     }
@@ -154,7 +154,12 @@ function updateGPXSelector() {
     const selector = document.getElementById('gpx-selector-content');
     if (!selector) return;
 
-    selector.innerHTML = '';
+    selector.innerHTML = `
+        <div class="gpx-selector-item">
+            <input type="radio" name="gpx-track" id="gpx-none" checked>
+            <label for="gpx-none">Aucune trace</label>
+        </div>
+    `;
 
     Object.keys(gpxLayers).forEach(name => {
         const item = document.createElement('div');
@@ -172,23 +177,30 @@ function updateGPXSelector() {
             }
         });
 
-        if (Object.keys(gpxLayers).indexOf(name) === 0) {
-            item.querySelector('input').checked = true;
-            showSingleGPXTrace(name);
-        }
+        // Hide the gpx trace
+        document.getElementById('gpx-none').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                showSingleGPXTrace(null);
+            }
+        });
 
         selector.appendChild(item);
     });
 }
+
 function showSingleGPXTrace(name) {
-    // Masque toutes les traces
     Object.keys(gpxLayers).forEach(traceName => {
         if (gpxLayers[traceName]) {
             map.removeLayer(gpxLayers[traceName]);
         }
     });
 
-    // Affiche la trace sélectionnée
+    if (!name) {
+        controlElevation.clear();
+        return;
+    }
+
+    // Display gpx trace
     if (gpxLayers[name]) {
         map.addLayer(gpxLayers[name]);
         controlElevation.clear();
@@ -250,9 +262,6 @@ async function refreshAllPositions() {
     }
 }
 
-/**
- * Initialise l'application
- */
 async function initApp() {
     try {
         initializeMap();
