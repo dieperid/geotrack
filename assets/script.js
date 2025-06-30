@@ -139,9 +139,6 @@ async function updateDevicePosition(id, device) {
         const positionData = await positionResponse.json();
         const latLng = L.latLng(positionData[0].latitude, positionData[0].longitude);
 
-
-        console.log(positionData);
-
         const formattedCoords = `
             <b>${device.username}</b><br>
             Lat: ${positionData[0].latitude.toFixed(6)}<br>
