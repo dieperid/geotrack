@@ -12,6 +12,42 @@ const {
 
 // Variables globales
 let map;
+let controlElevation;
+
+function initializeMap() {
+    map = L.map('map').setView(defaultCenter, defaultZoom);
+
+    // Couches de base
+    const baseLayers = {
+        "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
+        "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
+        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains })
+    };
+
+    baseLayers["OpenStreetMap"].addTo(map);
+    L.control.layers(baseLayers).addTo(map);
+
+    // Initialisation du contrôle d'élévation
+    controlElevation = L.control.elevation({
+        elevationDiv: "#elevation-div",
+        detached: true,
+        theme: "lightblue-theme",
+        width: "100%",
+        height: "100%",
+        imperial: false,
+        summary: 'inline',
+        ruler: true,
+        legend: true,
+    }).addTo(map);
+
+    // Gestion des coordonnées
+    map.on('mousemove', (e) => {
+        const coordsDisplay = document.querySelector('.coordinate');
+        if (coordsDisplay) {
+            coordsDisplay.textContent = `Lat: ${e.latlng.lat.toFixed(5)} | Lng: ${e.latlng.lng.toFixed(5)}`;
+        }
+    });
+}
 
 async function loadAllGPXFromS3() {
     const s3BaseUrl = AppConfig.s3_url;
@@ -59,58 +95,55 @@ async function loadAllGPXFromS3() {
     }
 }
 
-function addGPXToMap(gpxFile) {
-    return new Promise((resolve) => {
-        new L.GPX(gpxFile, {
+async function addGPXToMap(gpxFile) {
+    try {
+        const response = await fetch(gpxFile);
+        const gpxContent = await response.text();
+
+        // Vérification des données d'élévation
+        if (!gpxContent.includes('<ele>')) {
+            console.warn(`Le fichier ${gpxFile} ne contient pas de données d'élévation`);
+            return;
+        }
+
+        const gpxLayer = new L.GPX(gpxFile, {
             async: true,
             marker_options: {
                 startIconUrl: MapConfig.icons.start,
                 endIconUrl: MapConfig.icons.end,
                 shadowUrl: MapConfig.icons.shadow
+            },
+            polyline_options: {
+                color: '#0066ff',
+                opacity: 0.75,
+                weight: 5,
+                lineCap: 'round'
             }
-        })
-            .on("loaded", function (e) {
-                // map.fitBounds(e.target.getBounds());
-                resolve();
-            })
-            .on("error", function (e) {
-                console.error(`Erreur GPX ${gpxFile}:`, e.error);
-                resolve();
-            })
-            .addTo(map);
-    });
-}
+        });
 
-function initializeMap() {
-    map = L.map('map').setView(defaultCenter, defaultZoom);
+        gpxLayer.on("loaded", function (e) {
+            const gpx = e.target;
 
-    const baseLayers = {
-        "OpenStreetMap": L.tileLayer(
-            layers.osm.url, {
-            attribution: layers.osm.attribution
-        }
-        ),
-        "Google Streets": L.tileLayer(
-            layers.googleStreets.url, {
-            subdomains: layers.googleStreets.subdomains
-        }
-        ),
-        "Google Satellite": L.tileLayer(
-            layers.googleSatellite.url, {
-            subdomains: layers.googleSatellite.subdomains
-        }
-        )
-    };
+            controlElevation.clear();
+            controlElevation.load(gpx._gpx);
 
-    baseLayers["OpenStreetMap"].addTo(map);
-    L.control.layers(baseLayers).addTo(map);
+            map.fitBounds(gpx.getBounds());
 
-    map.on('mousemove', (e) => {
-        const coordsDisplay = document.querySelector('.coordinate');
-        if (coordsDisplay) {
-            coordsDisplay.textContent = `lat: ${e.latlng.lat.toFixed(5)} lng: ${e.latlng.lng.toFixed(5)}`;
-        }
-    });
+            gpx.on('click', function () {
+                controlElevation.clear();
+                controlElevation.addData(gpx);
+            });
+        });
+
+        gpxLayer.on("error", function (e) {
+            console.error(`Erreur GPX ${gpxFile}:`, e.error);
+        });
+
+        gpxLayer.addTo(map);
+
+    } catch (error) {
+        console.error(`Erreur lors du chargement de ${gpxFile}:`, error);
+    }
 }
 
 async function updateDevicePosition(id, device) {
