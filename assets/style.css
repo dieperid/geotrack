@@ -45,3 +45,46 @@ body {
 .elevation .area {
     fill: rgba(75, 150, 255, 0.2);
 }
+
+/* Styles pour le sélecteur GPX */
+.gpx-selector {
+    background: white;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.gpx-selector-header {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #2c3e50;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+.gpx-selector-content {
+    display: block;
+}
+
+.gpx-selector-item {
+    margin: 5px 0;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+}
+
+.gpx-selector-item input[type="radio"] {
+    margin-right: 8px;
+}
+
+.gpx-selector-item label {
+    cursor: pointer;
+    flex-grow: 1;
+}
+
+.gpx-selector-item:hover {
+    background: #f5f5f5;
+}

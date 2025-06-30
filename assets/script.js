@@ -1,5 +1,3 @@
-// script.js
-
 // Chargement des configurations
 const { devices, s3_url, bearerToken, api_base } = AppConfig;
 const {
@@ -13,11 +11,11 @@ const {
 // Variables globales
 let map;
 let controlElevation;
+let gpxLayers = {};
 
 function initializeMap() {
     map = L.map('map').setView(defaultCenter, defaultZoom);
 
-    // Couches de base
     const baseLayers = {
         "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
         "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
@@ -27,7 +25,6 @@ function initializeMap() {
     baseLayers["OpenStreetMap"].addTo(map);
     L.control.layers(baseLayers).addTo(map);
 
-    // Initialisation du contrôle d'élévation
     controlElevation = L.control.elevation({
         elevationDiv: "#elevation-div",
         detached: true,
@@ -40,7 +37,24 @@ function initializeMap() {
         legend: true,
     }).addTo(map);
 
-    // Gestion des coordonnées
+    const gpxControl = L.control({ position: 'topright' });
+    gpxControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'gpx-selector');
+        div.innerHTML = `
+        <div class="gpx-selector-header">Sélection de trace</div>
+        <div id="gpx-selector-content" class="gpx-selector-content"></div>
+    `;
+
+        div.querySelector('.gpx-selector-content').style.display = 'block';
+
+        div.querySelector('.gpx-selector-content').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        return div;
+    };
+    gpxControl.addTo(map);
+
     map.on('mousemove', (e) => {
         const coordsDisplay = document.querySelector('.coordinate');
         if (coordsDisplay) {
@@ -97,14 +111,7 @@ async function loadAllGPXFromS3() {
 
 async function addGPXToMap(gpxFile) {
     try {
-        const response = await fetch(gpxFile);
-        const gpxContent = await response.text();
-
-        // Vérification des données d'élévation
-        if (!gpxContent.includes('<ele>')) {
-            console.warn(`Le fichier ${gpxFile} ne contient pas de données d'élévation`);
-            return;
-        }
+        const fileName = gpxFile.split('/').pop().replace('.gpx', '');
 
         const gpxLayer = new L.GPX(gpxFile, {
             async: true,
@@ -114,7 +121,7 @@ async function addGPXToMap(gpxFile) {
                 shadowUrl: MapConfig.icons.shadow
             },
             polyline_options: {
-                color: '#0066ff',
+                color: getRandomColor(),
                 opacity: 0.75,
                 weight: 5,
                 lineCap: 'round'
@@ -122,27 +129,71 @@ async function addGPXToMap(gpxFile) {
         });
 
         gpxLayer.on("loaded", function (e) {
-            const gpx = e.target;
+            gpxLayers[fileName] = e.target;
 
-            controlElevation.clear();
-            controlElevation.load(gpx._gpx);
-
-            map.fitBounds(gpx.getBounds());
-
-            gpx.on('click', function () {
-                controlElevation.clear();
-                controlElevation.addData(gpx);
-            });
-        });
-
-        gpxLayer.on("error", function (e) {
-            console.error(`Erreur GPX ${gpxFile}:`, e.error);
+            updateGPXSelector();
         });
 
         gpxLayer.addTo(map);
 
     } catch (error) {
         console.error(`Erreur lors du chargement de ${gpxFile}:`, error);
+    }
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+function updateGPXSelector() {
+    const selector = document.getElementById('gpx-selector-content');
+    if (!selector) return;
+
+    selector.innerHTML = '';
+
+    Object.keys(gpxLayers).forEach(name => {
+        const item = document.createElement('div');
+        item.className = 'gpx-selector-item';
+        item.innerHTML = `
+            <input type="radio" name="gpx-track" id="gpx-${name}" value="${name}">
+            <label for="gpx-${name}">
+                ${name}
+            </label>
+        `;
+
+        item.querySelector('input').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                showSingleGPXTrace(name);
+            }
+        });
+
+        if (Object.keys(gpxLayers).indexOf(name) === 0) {
+            item.querySelector('input').checked = true;
+            showSingleGPXTrace(name);
+        }
+
+        selector.appendChild(item);
+    });
+}
+function showSingleGPXTrace(name) {
+    // Masque toutes les traces
+    Object.keys(gpxLayers).forEach(traceName => {
+        if (gpxLayers[traceName]) {
+            map.removeLayer(gpxLayers[traceName]);
+        }
+    });
+
+    // Affiche la trace sélectionnée
+    if (gpxLayers[name]) {
+        map.addLayer(gpxLayers[name]);
+        controlElevation.clear();
+        controlElevation.load(gpxLayers[name]._gpx);
+        map.fitBounds(gpxLayers[name].getBounds());
     }
 }
 
