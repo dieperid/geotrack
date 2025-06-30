@@ -1,208 +1,189 @@
-let bearerToken;
-let s3Url;
+// script.js
+
+// Chargement des configurations
+const { devices, s3_url, bearerToken, api_base } = AppConfig;
+const {
+    defaultCenter,
+    defaultZoom,
+    refreshInterval,
+    layers,
+    icons
+} = MapConfig;
+
+// Variables globales
 let map;
-const fetchInterval = 20000;
 
-const devices = {
-    1: {
-        username: "Anthony",
-        marker: null,
-    },
-    2: {
-        username: "David",
-        marker: null,
-    },
-};
+async function loadAllGPXFromS3() {
+    const s3BaseUrl = AppConfig.s3_url;
+    if (!s3BaseUrl) return;
 
-async function loadConfig() {
     try {
-        const response = await fetch("../config/config.json");
+        // 1. Request to list all bucket files
+        const listUrl = `${s3BaseUrl}?list-type=2`;
+        const response = await fetch(listUrl);
+
         if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
+            throw new Error(`Erreur S3: ${response.status}`);
         }
-        const data = await response.json();
-        bearerToken = data.token;
-        s3Url = data.s3_url;
-    } catch (err) {
-        console.error("Error loading config:", err);
+
+        // 2. Parse the XML response
+        const xmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+        // 3. Extract all GPX files
+        const keys = xmlDoc.getElementsByTagName('Key');
+        const gpxFiles = Array.from(keys)
+            .map(keyNode => keyNode.textContent)
+            .filter(key => key.endsWith('.gpx'))
+            .map(key => `${s3BaseUrl}/${key}`);
+
+        // Number of simultaneous loads
+        const MAX_PARALLEL = 3;
+
+        // 4. Loads each file (with parallelism limitation)
+        for (let i = 0; i < gpxFiles.length; i += MAX_PARALLEL) {
+            const batch = gpxFiles.slice(i, i + MAX_PARALLEL);
+            await Promise.all(batch.map(url => {
+                return new Promise(resolve => {
+                    addGPXToMap(url).then(resolve).catch(e => {
+                        console.error(`Erreur chargement ${url}:`, e);
+                        resolve();
+                    });
+                });
+            }));
+        }
+
+    } catch (error) {
+        console.error("Erreur lors du chargement des GPX depuis S3:", error);
     }
 }
 
-async function doesURLExist(url) {
-    return fetch(url, { method: "GET" })
-        .then((response) => {
-            return response.status === 200;
-        })
-        .catch(() => {
-            return false;
-        });
-}
-
-function addGPX(gpxFile) {
-    new L.GPX(gpxFile, {
-        async: true,
-        marker_options: {
-            startIconUrl: "assets/img/pin-icon-start.png",
-            endIconUrl: "assets/img/pin-icon-end.png",
-            shadowUrl: "assets/img/pin-shadow.png",
-        },
-    })
-        .on("loaded", function (e) {
-            map.fitBounds(e.target.getBounds());
-        })
-        .addTo(map);
-}
-
-// Fonction pour charger et afficher la carte
-async function initializeMap() {
-    // Map initialization
-    map = L.map("map").setView([46.818188, 8.227512], 8);
-
-    //osm layer
-    var osm = L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        }
-    );
-    osm.addTo(map);
-
-    // google street
-    googleStreets = L.tileLayer(
-        "http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-        {
-            subdomains: ["mt0", "mt1", "mt2", "mt3"],
-        }
-    );
-
-    //google satellite
-    googleSat = L.tileLayer(
-        "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        {
-            subdomains: ["mt0", "mt1", "mt2", "mt3"],
-        }
-    );
-
-    var baseMaps = {
-        OSM: osm,
-        "Google Street": googleStreets,
-        "Google Satellite": googleSat,
-    };
-
-    L.control.layers(baseMaps).addTo(map);
-
-    /**
-    // Liste des fichiers GPX à ajouter
-    const gpxFiles = [
-        "assets/gpx/file.gpx",
-        "assets/gpx/file2.gpx",
-        "assets/gpx/file3.gpx",
-    ];
-
-    // Ajouter chaque fichier GPX à la carte
-    gpxFiles.forEach(addGPX);
-*/
-
-    map.on("mousemove", function (e) {
-        document.getElementsByClassName("coordinate")[0].innerHTML =
-            "lat: " + e.latlng.lat + " lng: " + e.latlng.lng;
-    });
-
-    if (await doesURLExist(s3Url)) {
-        new L.GPX(s3Url, {
+function addGPXToMap(gpxFile) {
+    return new Promise((resolve) => {
+        new L.GPX(gpxFile, {
             async: true,
             marker_options: {
-                startIconUrl: "assets/img/pin-icon-start.png",
-                endIconUrl: "assets/img/pin-icon-end.png",
-                shadowUrl: "assets/img/pin-shadow.png",
-            },
+                startIconUrl: MapConfig.icons.start,
+                endIconUrl: MapConfig.icons.end,
+                shadowUrl: MapConfig.icons.shadow
+            }
         })
             .on("loaded", function (e) {
-                map.fitBounds(e.target.getBounds());
+                // map.fitBounds(e.target.getBounds());
+                resolve();
+            })
+            .on("error", function (e) {
+                console.error(`Erreur GPX ${gpxFile}:`, e.error);
+                resolve();
             })
             .addTo(map);
-    } else {
-        console.error("GPX file not found at the specified URL.");
+    });
+}
+
+function initializeMap() {
+    map = L.map('map').setView(defaultCenter, defaultZoom);
+
+    const baseLayers = {
+        "OpenStreetMap": L.tileLayer(
+            layers.osm.url, {
+            attribution: layers.osm.attribution
+        }
+        ),
+        "Google Streets": L.tileLayer(
+            layers.googleStreets.url, {
+            subdomains: layers.googleStreets.subdomains
+        }
+        ),
+        "Google Satellite": L.tileLayer(
+            layers.googleSatellite.url, {
+            subdomains: layers.googleSatellite.subdomains
+        }
+        )
+    };
+
+    baseLayers["OpenStreetMap"].addTo(map);
+    L.control.layers(baseLayers).addTo(map);
+
+    map.on('mousemove', (e) => {
+        const coordsDisplay = document.querySelector('.coordinate');
+        if (coordsDisplay) {
+            coordsDisplay.textContent = `lat: ${e.latlng.lat.toFixed(5)} lng: ${e.latlng.lng.toFixed(5)}`;
+        }
+    });
+}
+
+async function updateDevicePosition(id, device) {
+    try {
+        const deviceResponse = await fetch(`${api_base}/devices/${id}`, {
+            headers: { Authorization: bearerToken }
+        });
+
+        if (!deviceResponse.ok) return;
+
+        const deviceData = await deviceResponse.json();
+
+        // Checks if the device is online
+        if (deviceData.status === "unknown" || deviceData.status === "offline") {
+            if (device.marker) map.removeLayer(device.marker);
+            return;
+        }
+
+        // Get the position
+        const positionResponse = await fetch(`${api_base}/positions?deviceId=${id}`, {
+            headers: { Authorization: bearerToken }
+        });
+
+        if (!positionResponse.ok) return;
+
+        const positionData = await positionResponse.json();
+        const latLng = L.latLng(positionData[0].latitude, positionData[0].longitude);
+
+
+        console.log(positionData);
+
+        const formattedCoords = `
+            <b>${device.username}</b><br>
+            Lat: ${positionData[0].latitude.toFixed(6)}<br>
+            Lng: ${positionData[0].longitude.toFixed(6)}<br>
+            <small>${new Date(positionData[0].deviceTime).toLocaleString()}</small>
+        `;
+
+        // Update or create marker
+        if (!device.marker) {
+            device.marker = L.marker(latLng).addTo(map);
+            device.marker.bindPopup(formattedCoords);
+        } else {
+            device.marker.setLatLng(latLng);
+            device.marker.getPopup().setContent(formattedCoords);
+        }
+
+    } catch (error) {
+        console.error(`Error updating device ${id}:`, error);
+    }
+}
+
+async function refreshAllPositions() {
+    for (const [id, device] of Object.entries(devices)) {
+        await updateDevicePosition(id, device);
     }
 }
 
 /**
- * Function to fetch the position from an api call
+ * Initialise l'application
  */
-async function fetchPosition() {
-    for (const id in devices) {
-        const { username } = devices[id];
+async function initApp() {
+    try {
+        initializeMap();
 
-        fetch(`https://tracking.anthonydieperink.ch/api/devices/${id}`, {
-            method: "GET",
-            credentials: "include",
-            headers: {
-                Authorization: bearerToken,
-            },
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error("Network response was not ok");
-                }
-                return response.json();
-            })
-            .then((data) => {
-                // Handle the JSON response data here
-                if (data.status !== "unknown" && data.status !== "offline") {
-                    fetch(
-                        `https://tracking.anthonydieperink.ch/api/positions?deviceId=${id}`,
-                        {
-                            method: "GET",
-                            credentials: "include",
-                            headers: {
-                                Authorization: bearerToken,
-                            },
-                        }
-                    )
-                        .then((response) => {
-                            if (!response.ok) {
-                                throw new Error("Network response was not ok");
-                            }
-                            return response.json();
-                        })
-                        .then((data) => {
-                            // Handle the JSON response data here
-                            var latLng = L.latLng(
-                                data[0].latitude,
-                                data[0].longitude
-                            );
+        await loadAllGPXFromS3();
+        await refreshAllPositions();
 
-                            // Create a new marker of update existing one
-                            if (devices[id].marker === null) {
-                                devices[id].marker =
-                                    L.marker(latLng).addTo(map);
-                                devices[id].marker.bindPopup(`${username}`);
-                            } else {
-                                devices[id].marker.setLatLng(latLng);
-                            }
+        setInterval(refreshAllPositions, refreshInterval);
 
-                            // Add marker to the layer
-                            map.addLayer(devices[id].marker);
-                        })
-                        .catch((error) => {
-                            console.error("Fetch error:", error);
-                        });
-                } else {
-                    map.removeLayer(devices[id].marker);
-                }
-            })
-            .catch((error) => {
-                console.error("Fetch error:", error);
-            });
+    } catch (error) {
+        console.error("Initialization error:", error);
     }
 }
 
-async function main() {
-    await loadConfig();
-    await initializeMap();
-    fetchPosition();
-    setInterval(fetchPosition, fetchInterval);
-}
-
-window.addEventListener("load", main);
+window.addEventListener('load', initApp);
