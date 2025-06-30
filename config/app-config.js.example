@@ -1,0 +1,10 @@
+const AppConfig = {
+    devices: {
+        1: { username: "John Doe", marker: null },
+        2: { username: "John Doe", marker: null }
+    },
+
+    bearerToken: "Bearer <token here>",
+    s3_url: "https://s3.example.com/geotrack",
+    api_base: "https://tracking.example.com/api",
+};

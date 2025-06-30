@@ -1,8 +1,9 @@
-version: "3.8"
+version: "3"
 services:
-    geotrack:
-        image: php:8.2-apache
-        ports:
-            - 8080:80
+    web:
+        image: nginx:alpine
         volumes:
-            - ${PWD}:/var/www/html
+            - .:/usr/share/nginx/html
+        ports:
+            - "8080:80"
+        restart: unless-stopped
