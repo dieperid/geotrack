@@ -1,5 +1,3 @@
-// script.js
-
 // Chargement des configurations
 const { devices, s3_url, bearerToken, api_base } = AppConfig;
 const {
@@ -12,6 +10,61 @@ const {
 
 // Variables globales
 let map;
+let controlElevation;
+let gpxLayers = {};
+
+function initializeMap() {
+    map = L.map('map', {
+        rotate: true,
+        rotation: 0
+    }).setView(defaultCenter, defaultZoom);
+
+    const baseLayers = {
+        "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
+        "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
+        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains })
+    };
+
+    baseLayers["OpenStreetMap"].addTo(map);
+    L.control.layers(baseLayers).addTo(map);
+
+    controlElevation = L.control.elevation({
+        elevationDiv: "#elevation-div",
+        detached: true,
+        theme: "lightblue-theme",
+        width: "100%",
+        height: "100%",
+        imperial: false,
+        summary: 'inline',
+        ruler: true,
+        legend: true,
+    }).addTo(map);
+
+    const gpxControl = L.control({ position: 'topright' });
+    gpxControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'gpx-selector');
+        div.innerHTML = `
+        <div class="gpx-selector-header">Sélection de trace</div>
+        <div id="gpx-selector-content" class="gpx-selector-content"></div>
+    `;
+
+        div.querySelector('.gpx-selector-content').style.display = 'block';
+
+        div.querySelector('.gpx-selector-content').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        return div;
+    };
+    gpxControl.addTo(map);
+
+    map.on('mousemove', (e) => {
+        const coordsDisplay = document.querySelector('.coordinate');
+        if (coordsDisplay) {
+            coordsDisplay.textContent = `Lat: ${e.latlng.lat.toFixed(5)} | Lng: ${e.latlng.lng.toFixed(5)}`;
+        }
+    });
+}
 
 async function loadAllGPXFromS3() {
     const s3BaseUrl = AppConfig.s3_url;
@@ -59,58 +112,101 @@ async function loadAllGPXFromS3() {
     }
 }
 
-function addGPXToMap(gpxFile) {
-    return new Promise((resolve) => {
-        new L.GPX(gpxFile, {
+async function addGPXToMap(gpxFile) {
+    try {
+        const fileName = gpxFile.split('/').pop().replace('.gpx', '');
+
+        const gpxLayer = new L.GPX(gpxFile, {
             async: true,
             marker_options: {
                 startIconUrl: MapConfig.icons.start,
                 endIconUrl: MapConfig.icons.end,
                 shadowUrl: MapConfig.icons.shadow
+            },
+            polyline_options: {
+                color: getRandomColor(),
+                opacity: 0.75,
+                weight: 5,
+                lineCap: 'round'
             }
-        })
-            .on("loaded", function (e) {
-                // map.fitBounds(e.target.getBounds());
-                resolve();
-            })
-            .on("error", function (e) {
-                console.error(`Erreur GPX ${gpxFile}:`, e.error);
-                resolve();
-            })
-            .addTo(map);
+        });
+
+        gpxLayer.on("loaded", function (e) {
+            gpxLayers[fileName] = e.target;
+
+            updateGPXSelector();
+        });
+    } catch (error) {
+        console.error(`Erreur lors du chargement de ${gpxFile}:`, error);
+    }
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+function updateGPXSelector() {
+    const selector = document.getElementById('gpx-selector-content');
+    if (!selector) return;
+
+    selector.innerHTML = `
+        <div class="gpx-selector-item">
+            <input type="radio" name="gpx-track" id="gpx-none" checked>
+            <label for="gpx-none">Aucune trace</label>
+        </div>
+    `;
+
+    Object.keys(gpxLayers).forEach(name => {
+        const item = document.createElement('div');
+        item.className = 'gpx-selector-item';
+        item.innerHTML = `
+            <input type="radio" name="gpx-track" id="gpx-${name}" value="${name}">
+            <label for="gpx-${name}">
+                ${name}
+            </label>
+        `;
+
+        item.querySelector('input').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                showSingleGPXTrace(name);
+            }
+        });
+
+        // Hide the gpx trace
+        document.getElementById('gpx-none').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                showSingleGPXTrace(null);
+            }
+        });
+
+        selector.appendChild(item);
     });
 }
 
-function initializeMap() {
-    map = L.map('map').setView(defaultCenter, defaultZoom);
-
-    const baseLayers = {
-        "OpenStreetMap": L.tileLayer(
-            layers.osm.url, {
-            attribution: layers.osm.attribution
-        }
-        ),
-        "Google Streets": L.tileLayer(
-            layers.googleStreets.url, {
-            subdomains: layers.googleStreets.subdomains
-        }
-        ),
-        "Google Satellite": L.tileLayer(
-            layers.googleSatellite.url, {
-            subdomains: layers.googleSatellite.subdomains
-        }
-        )
-    };
-
-    baseLayers["OpenStreetMap"].addTo(map);
-    L.control.layers(baseLayers).addTo(map);
-
-    map.on('mousemove', (e) => {
-        const coordsDisplay = document.querySelector('.coordinate');
-        if (coordsDisplay) {
-            coordsDisplay.textContent = `lat: ${e.latlng.lat.toFixed(5)} lng: ${e.latlng.lng.toFixed(5)}`;
+function showSingleGPXTrace(name) {
+    Object.keys(gpxLayers).forEach(traceName => {
+        if (gpxLayers[traceName]) {
+            map.removeLayer(gpxLayers[traceName]);
         }
     });
+
+    if (!name) {
+        controlElevation.clear();
+        return;
+    }
+
+    // Display gpx trace
+    if (gpxLayers[name]) {
+        map.addLayer(gpxLayers[name]);
+        controlElevation.clear();
+        controlElevation.load(gpxLayers[name]._gpx);
+        map.fitBounds(gpxLayers[name].getBounds());
+    }
 }
 
 async function updateDevicePosition(id, device) {
@@ -166,9 +262,6 @@ async function refreshAllPositions() {
     }
 }
 
-/**
- * Initialise l'application
- */
 async function initApp() {
     try {
         initializeMap();
