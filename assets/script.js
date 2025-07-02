@@ -22,7 +22,17 @@ function initializeMap() {
     const baseLayers = {
         "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
         "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
-        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains })
+        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains }),
+        "SwissTopo (Couleur)": L.tileLayer(layers.swissTopo.url, {
+            attribution: layers.swissTopo.attribution,
+            maxZoom: layers.swissTopo.maxZoom,
+            minZoom: layers.swissTopo.minZoom
+        }),
+        "SwissTopo (Aérien)": L.tileLayer(layers.swissTopoAerial.url, {
+            attribution: layers.swissTopoAerial.attribution,
+            maxZoom: layers.swissTopoAerial.maxZoom,
+            minZoom: layers.swissTopoAerial.minZoom
+        })
     };
 
     baseLayers["OpenStreetMap"].addTo(map);
