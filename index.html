@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 
 <head>
     <meta charset="UTF-8" />
@@ -18,7 +18,14 @@
 
 <body>
     <div id="map-container">
-        <div id="map"></div>
+        <div id="map">
+            <div class="leaflet-top leaflet-right gpx-selector-block">
+                <div class="leaflet-control gpx-selector">
+                    <div class="gpx-selector-header">Sélection de trace ▼</div>
+                    <div id="gpx-selector-content" class="gpx-selector-content" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
         <div id="elevation-div"></div>
     </div>
 

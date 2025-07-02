@@ -22,7 +22,17 @@ function initializeMap() {
     const baseLayers = {
         "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
         "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
-        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains })
+        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains }),
+        "SwissTopo (Couleur)": L.tileLayer(layers.swissTopo.url, {
+            attribution: layers.swissTopo.attribution,
+            maxZoom: layers.swissTopo.maxZoom,
+            minZoom: layers.swissTopo.minZoom
+        }),
+        "SwissTopo (Aérien)": L.tileLayer(layers.swissTopoAerial.url, {
+            attribution: layers.swissTopoAerial.attribution,
+            maxZoom: layers.swissTopoAerial.maxZoom,
+            minZoom: layers.swissTopoAerial.minZoom
+        })
     };
 
     baseLayers["OpenStreetMap"].addTo(map);
@@ -40,23 +50,25 @@ function initializeMap() {
         legend: true,
     }).addTo(map);
 
-    const gpxControl = L.control({ position: 'topright' });
-    gpxControl.onAdd = function () {
-        const div = L.DomUtil.create('div', 'gpx-selector');
-        div.innerHTML = `
-        <div class="gpx-selector-header">Sélection de trace</div>
-        <div id="gpx-selector-content" class="gpx-selector-content"></div>
-    `;
+    document.getElementById('gpx-selector-content').addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 
-        div.querySelector('.gpx-selector-content').style.display = 'block';
+    const header = document.querySelector('.gpx-selector-header');
+    const content = document.getElementById('gpx-selector-content');
 
-        div.querySelector('.gpx-selector-content').addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
+    header.addEventListener('click', function (e) {
+        e.stopPropagation();
+        content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        header.innerHTML = header.innerHTML.includes('▼')
+            ? 'Sélection de trace ▲'
+            : 'Sélection de trace ▼';
+    });
 
-        return div;
-    };
-    gpxControl.addTo(map);
+    // Empêche la fermeture quand on clique dans la liste
+    content.addEventListener('click', function (e) {
+        e.stopPropagation();
+    });
 
     map.on('mousemove', (e) => {
         const coordsDisplay = document.querySelector('.coordinate');

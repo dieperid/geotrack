@@ -15,6 +15,18 @@ const MapConfig = {
         googleSatellite: {
             url: "http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
             subdomains: ["mt0", "mt1", "mt2", "mt3"]
+        },
+        swissTopo: {
+            url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg",
+            attribution: '© <a href="https://www.swisstopo.admin.ch/">swisstopo</a>',
+            maxZoom: 18,
+            minZoom: 2
+        },
+        swissTopoAerial: {
+            url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg",
+            attribution: '© <a href="https://www.swisstopo.admin.ch/">swisstopo</a>',
+            maxZoom: 18,
+            minZoom: 2
         }
     },
 
