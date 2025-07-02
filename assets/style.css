@@ -47,14 +47,20 @@ body {
 }
 
 /* Styles pour le sélecteur GPX */
+
+.gpx-selector-block {
+    padding-top: 7vh;
+}
+
 .gpx-selector {
     background: white;
     padding: 10px;
     border-radius: 5px;
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
     z-index: 1000;
-    max-height: 300px;
-    overflow-y: auto;
+    max-height: 80vh;
+    overflow: hidden;
+    min-width: 200px;
 }
 
 .gpx-selector-header {
@@ -63,10 +69,19 @@ body {
     color: #2c3e50;
     border-bottom: 1px solid #eee;
     padding-bottom: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.gpx-selector-header:hover {
+    background-color: #f8f9fa;
 }
 
 .gpx-selector-content {
-    display: block;
+    max-height: calc(80vh - 220px);
+    overflow-y: auto;
+    margin-top: 8px;
+    transition: all 0.3s ease;
 }
 
 .gpx-selector-item {
