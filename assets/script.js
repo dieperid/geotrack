@@ -58,12 +58,13 @@ function initializeMap() {
     const content = document.getElementById('gpx-selector-content');
 
     header.addEventListener('click', function (e) {
+        e.preventDefault();
         e.stopPropagation();
         content.style.display = content.style.display === 'none' ? 'block' : 'none';
         header.innerHTML = header.innerHTML.includes('▼')
             ? 'Sélection de trace ▲'
             : 'Sélection de trace ▼';
-    });
+    }, false);
 
     // Empêche la fermeture quand on clique dans la liste
     content.addEventListener('click', function (e) {
