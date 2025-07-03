@@ -13,6 +13,17 @@ let map;
 let controlElevation;
 let gpxLayers = {};
 
+const header = document.querySelector('.gpx-selector-header');
+const content = document.getElementById('gpx-selector-content');
+
+function toggleMenu() {
+    const isHidden = content.style.display === 'none';
+    content.style.display = isHidden ? 'block' : 'none';
+    header.innerHTML = isHidden
+        ? 'Sélection de trace ▲'
+        : 'Sélection de trace ▼';
+}
+
 function initializeMap() {
     map = L.map('map', {
         rotate: true,
@@ -48,28 +59,26 @@ function initializeMap() {
         summary: 'inline',
         ruler: true,
         legend: true,
+        downloadLink: false,
     }).addTo(map);
 
     document.getElementById('gpx-selector-content').addEventListener('click', (e) => {
         e.stopPropagation();
     });
 
-    const header = document.querySelector('.gpx-selector-header');
-    const content = document.getElementById('gpx-selector-content');
-
     header.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        content.style.display = content.style.display === 'none' ? 'block' : 'none';
-        header.innerHTML = header.innerHTML.includes('▼')
-            ? 'Sélection de trace ▲'
-            : 'Sélection de trace ▼';
-    }, false);
-
-    // Empêche la fermeture quand on clique dans la liste
-    content.addEventListener('click', function (e) {
-        e.stopPropagation();
+        if (window.innerWidth > 768) {
+            e.preventDefault();
+            toggleMenu();
+        }
     });
+
+    header.addEventListener('touchend', function (e) {
+        if (window.innerWidth <= 768) {
+            e.preventDefault();
+            toggleMenu();
+        }
+    }, { passive: false });
 
     map.on('mousemove', (e) => {
         const coordsDisplay = document.querySelector('.coordinate');
