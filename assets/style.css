@@ -25,18 +25,6 @@ body {
     border-top: 1px solid #ddd;
 }
 
-.coordinate {
-    position: absolute;
-    bottom: 60px;
-    /* Au-dessus du profil */
-    right: 10px;
-    background: rgba(255, 255, 255, 0.8);
-    padding: 5px 10px;
-    border-radius: 3px;
-    font-size: 12px;
-    z-index: 1000;
-}
-
 /* Style pour le profil d'élévation */
 .elevation-control {
     height: 100% !important;
