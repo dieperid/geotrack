@@ -13,19 +13,16 @@ body {
 
 #map {
     flex: 3;
-    /* 75% de l'espace */
     width: 100%;
 }
 
 #elevation-div {
     flex: 1;
-    /* 25% de l'espace */
     width: 100%;
     background: #fff;
     border-top: 1px solid #ddd;
 }
 
-/* Style pour le profil d'élévation */
 .elevation-control {
     height: 100% !important;
 }
@@ -34,7 +31,6 @@ body {
     fill: rgba(75, 150, 255, 0.2);
 }
 
-/* Styles pour le sélecteur GPX */
 .gpx-selector-block {
     padding-top: 7vh;
 }
@@ -65,13 +61,13 @@ body {
 }
 
 .gpx-selector-content {
+    margin-top: 5px;
     max-height: calc(80vh - 220px);
     overflow-y: auto;
     transition: all 0.3s ease;
 }
 
 .gpx-selector-item {
-    margin: 5px 0;
     padding: 5px;
     display: flex;
     align-items: center;
