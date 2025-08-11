@@ -279,8 +279,8 @@ async function updateDevicePosition(id, device) {
 }
 
 async function refreshAllPositions() {
-    for (const [id, device] of Object.entries(devices)) {
-        await updateDevicePosition(id, device);
+    for (const device of Object.values(devices)) {
+        await updateDevicePosition(device.id, device);
     }
 }
 
