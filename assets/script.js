@@ -98,7 +98,7 @@ async function loadAllGPXFromS3() {
         const response = await fetch(listUrl);
 
         if (!response.ok) {
-            throw new Error(`Erreur S3: ${response.status}`);
+            throw new Error(`Error S3: ${response.status}`);
         }
 
         // 2. Parse the XML response
@@ -113,16 +113,28 @@ async function loadAllGPXFromS3() {
             .filter(key => key.endsWith('.gpx'))
             .map(key => `${s3BaseUrl}/${key}`);
 
+        const mainGpx = gpxFiles.find(url => url.includes('main.gpx'));
+
         // Number of simultaneous loads
         const MAX_PARALLEL = 3;
 
+        if (mainGpx) {
+            try {
+                await addGPXToMap(mainGpx, true);
+            } catch (e) {
+                console.error("Error on main.gpx:", e);
+            }
+        }
+
         // 4. Loads each file (with parallelism limitation)
         for (let i = 0; i < gpxFiles.length; i += MAX_PARALLEL) {
-            const batch = gpxFiles.slice(i, i + MAX_PARALLEL);
+            const batch = gpxFiles.slice(i, i + MAX_PARALLEL)
+                .filter(url => url !== mainGpx); // Exclude main.gpx
+            
             await Promise.all(batch.map(url => {
                 return new Promise(resolve => {
                     addGPXToMap(url).then(resolve).catch(e => {
-                        console.error(`Erreur chargement ${url}:`, e);
+                        console.error(`Loading error ${url}:`, e);
                         resolve();
                     });
                 });
@@ -134,7 +146,7 @@ async function loadAllGPXFromS3() {
     }
 }
 
-async function addGPXToMap(gpxFile) {
+async function addGPXToMap(gpxFile, showByDefault = false) {
     try {
         const fileName = gpxFile.split('/').pop().replace('.gpx', '');
 
@@ -146,9 +158,9 @@ async function addGPXToMap(gpxFile) {
                 shadowUrl: MapConfig.icons.shadow
             },
             polyline_options: {
-                color: getRandomColor(),
+                color: showByDefault ? '#FF0000' : getRandomColor(),
                 opacity: 0.75,
-                weight: 5,
+                weight: showByDefault ? 6 : 5,
                 lineCap: 'round'
             }
         });
@@ -157,9 +169,17 @@ async function addGPXToMap(gpxFile) {
             gpxLayers[fileName] = e.target;
 
             updateGPXSelector();
+
+            if (showByDefault) {
+                showSingleGPXTrace(fileName);
+                const radio = document.getElementById(`gpx-${fileName}`);
+                
+                if (radio) radio.checked = true;
+            }
         });
     } catch (error) {
         console.error(`Erreur lors du chargement de ${gpxFile}:`, error);
+        throw error;
     }
 }
 
@@ -279,8 +299,8 @@ async function updateDevicePosition(id, device) {
 }
 
 async function refreshAllPositions() {
-    for (const [id, device] of Object.entries(devices)) {
-        await updateDevicePosition(id, device);
+    for (const device of Object.values(devices)) {
+        await updateDevicePosition(device.id, device);
     }
 }
 

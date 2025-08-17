@@ -1,7 +1,7 @@
 const AppConfig = {
     devices: {
-        1: { username: "John Doe", marker: null },
-        2: { username: "John Doe", marker: null }
+        1: { id: 3 username: "John Doe", marker: null },
+        2: { id: 2 username: "John Doe", marker: null }
     },
 
     bearerToken: "Bearer <token here>",
