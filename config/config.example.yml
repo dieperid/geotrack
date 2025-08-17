@@ -1,0 +1,13 @@
+app-config:
+  devices:
+    1:
+      id: 0
+      username: "John Doe"
+      marker: null
+    2:
+      id: 0
+      username: "John Doe"
+      marker: null
+  bearerToken: "Bearer <TOKEN>"
+  s3_url: ""
+  api_base: ""
