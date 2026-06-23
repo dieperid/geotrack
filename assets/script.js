@@ -163,6 +163,8 @@ async function loadAllGPXFromS3() {
             : null;
         const initialGpx = requestedGpx || mainGpx || null;
 
+        const mainGpx = gpxFiles.find(url => url.includes('main.gpx'));
+
         // Number of simultaneous loads
         const MAX_PARALLEL = 3;
 
