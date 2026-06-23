@@ -1,87 +1,122 @@
 // Chargement des configurations
 const { devices, s3_url, bearerToken, api_base } = AppConfig;
-const {
-    defaultCenter,
-    defaultZoom,
-    refreshInterval,
-    layers,
-    icons
-} = MapConfig;
+const { defaultCenter, defaultZoom, refreshInterval, layers, icons } =
+    MapConfig;
 
 // Variables globales
 let map;
 let controlElevation;
 let gpxLayers = {};
+let activeGpxName = null;
 
-const header = document.querySelector('.gpx-selector-header');
-const content = document.getElementById('gpx-selector-content');
+const header = document.querySelector(".gpx-selector-header");
+const content = document.getElementById("gpx-selector-content");
+
+function getFileNameFromPath(path) {
+    return path.split("/").pop();
+}
+
+function getDisplayNameFromFile(fileName) {
+    return fileName.replace(/\.gpx$/i, "");
+}
+
+function getRequestedGpxFile() {
+    const fileParam = new URLSearchParams(window.location.search).get("file");
+    return fileParam ? fileParam.trim() : null;
+}
+
+function updateSelectedFileInUrl(name) {
+    const url = new URL(window.location.href);
+
+    if (name) {
+        url.searchParams.set("file", `${name}.gpx`);
+    } else {
+        url.searchParams.delete("file");
+    }
+
+    window.history.replaceState({}, "", url);
+}
 
 function toggleMenu() {
-    const isHidden = content.style.display === 'none';
-    content.style.display = isHidden ? 'block' : 'none';
+    const isHidden = content.style.display === "none";
+    content.style.display = isHidden ? "block" : "none";
     header.innerHTML = isHidden
-        ? 'Sélection de trace ▲'
-        : 'Sélection de trace ▼';
+        ? "Sélection de trace ▲"
+        : "Sélection de trace ▼";
 }
 
 function initializeMap() {
-    map = L.map('map', {
+    map = L.map("map", {
         rotate: true,
-        rotation: 0
+        rotation: 0,
     }).setView(defaultCenter, defaultZoom);
 
     const baseLayers = {
-        "OpenStreetMap": L.tileLayer(layers.osm.url, { attribution: layers.osm.attribution }),
-        "Google Streets": L.tileLayer(layers.googleStreets.url, { subdomains: layers.googleStreets.subdomains }),
-        "Google Satellite": L.tileLayer(layers.googleSatellite.url, { subdomains: layers.googleSatellite.subdomains }),
+        OpenStreetMap: L.tileLayer(layers.osm.url, {
+            attribution: layers.osm.attribution,
+        }),
+        "Google Streets": L.tileLayer(layers.googleStreets.url, {
+            subdomains: layers.googleStreets.subdomains,
+        }),
+        "Google Satellite": L.tileLayer(layers.googleSatellite.url, {
+            subdomains: layers.googleSatellite.subdomains,
+        }),
         "SwissTopo (Couleur)": L.tileLayer(layers.swissTopo.url, {
             attribution: layers.swissTopo.attribution,
             maxZoom: layers.swissTopo.maxZoom,
-            minZoom: layers.swissTopo.minZoom
+            minZoom: layers.swissTopo.minZoom,
         }),
         "SwissTopo (Aérien)": L.tileLayer(layers.swissTopoAerial.url, {
             attribution: layers.swissTopoAerial.attribution,
             maxZoom: layers.swissTopoAerial.maxZoom,
-            minZoom: layers.swissTopoAerial.minZoom
-        })
+            minZoom: layers.swissTopoAerial.minZoom,
+        }),
     };
 
     baseLayers["OpenStreetMap"].addTo(map);
     L.control.layers(baseLayers).addTo(map);
 
-    controlElevation = L.control.elevation({
-        elevationDiv: "#elevation-div",
-        detached: true,
-        theme: "lightblue-theme",
-        width: "100%",
-        height: "100%",
-        imperial: false,
-        summary: 'inline',
-        ruler: true,
-        legend: true,
-        downloadLink: false,
-    }).addTo(map);
+    controlElevation = L.control
+        .elevation({
+            elevationDiv: "#elevation-div",
+            detached: true,
+            theme: "lightblue-theme",
+            width: "100%",
+            height: "100%",
+            imperial: false,
+            summary: "inline",
+            ruler: true,
+            legend: true,
+            downloadLink: false,
+        })
+        .addTo(map);
 
-    document.getElementById('gpx-selector-content').addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
+    document
+        .getElementById("gpx-selector-content")
+        .addEventListener("click", (e) => {
+            e.stopPropagation();
+        });
 
-    header.addEventListener('click', function (e) {
+    header.addEventListener("click", function (e) {
         if (window.innerWidth > 768) {
             e.preventDefault();
             toggleMenu();
         }
     });
 
-    header.addEventListener('touchend', function (e) {
-        if (window.innerWidth <= 768) {
-            e.preventDefault();
-            toggleMenu();
-        }
-    }, { passive: false });
+    header.addEventListener(
+        "touchend",
+        function (e) {
+            if (window.innerWidth <= 768) {
+                e.preventDefault();
+                toggleMenu();
+            }
+        },
+        { passive: false },
+    );
 
-    map.on('mousemove', (e) => {
-        const coordsDisplay = document.querySelector('.coordinate');
+    map.on("mousemove", (e) => {
+        const coordsDisplay = document.querySelector(".coordinate");
         if (coordsDisplay) {
             coordsDisplay.textContent = `Lat: ${e.latlng.lat.toFixed(5)} | Lng: ${e.latlng.lng.toFixed(5)}`;
         }
@@ -89,7 +124,7 @@ function initializeMap() {
 }
 
 async function loadAllGPXFromS3() {
-    const s3BaseUrl = AppConfig.s3_url;
+    const s3BaseUrl = s3_url;
     if (!s3BaseUrl) return;
 
     try {
@@ -107,40 +142,63 @@ async function loadAllGPXFromS3() {
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
 
         // 3. Extract all GPX files
-        const keys = xmlDoc.getElementsByTagName('Key');
+        const requestedFile = getRequestedGpxFile();
+        const keys = xmlDoc.getElementsByTagName("Key");
         const gpxFiles = Array.from(keys)
-            .map(keyNode => keyNode.textContent)
-            .filter(key => key.endsWith('.gpx'))
-            .map(key => `${s3BaseUrl}/${key}`);
+            .map((keyNode) => keyNode.textContent)
+            .filter((key) => key.toLowerCase().endsWith(".gpx"))
+            .map((key) => ({
+                key,
+                fileName: getFileNameFromPath(key),
+                url: `${s3BaseUrl}/${key}`,
+            }));
 
-        const mainGpx = gpxFiles.find(url => url.includes('main.gpx'));
+        const mainGpx = gpxFiles.find((file) => file.fileName === "main.gpx");
+        const requestedGpx = requestedFile
+            ? gpxFiles.find(
+                  (file) =>
+                      file.fileName === requestedFile ||
+                      file.key === requestedFile,
+              )
+            : null;
+        const initialGpx = requestedGpx || mainGpx || null;
 
         // Number of simultaneous loads
         const MAX_PARALLEL = 3;
 
-        if (mainGpx) {
+        if (requestedFile && !requestedGpx) {
+            console.warn(`GPX file not found in S3: ${requestedFile}`);
+        }
+
+        if (initialGpx) {
             try {
-                await addGPXToMap(mainGpx, true);
+                await addGPXToMap(initialGpx.url, true);
             } catch (e) {
-                console.error("Error on main.gpx:", e);
+                console.error(`Error on ${initialGpx.fileName}:`, e);
             }
         }
 
         // 4. Loads each file (with parallelism limitation)
-        for (let i = 0; i < gpxFiles.length; i += MAX_PARALLEL) {
-            const batch = gpxFiles.slice(i, i + MAX_PARALLEL)
-                .filter(url => url !== mainGpx); // Exclude main.gpx
-            
-            await Promise.all(batch.map(url => {
-                return new Promise(resolve => {
-                    addGPXToMap(url).then(resolve).catch(e => {
-                        console.error(`Loading error ${url}:`, e);
-                        resolve();
-                    });
-                });
-            }));
-        }
+        const remainingGpxFiles = gpxFiles.filter(
+            (file) => file.url !== initialGpx?.url,
+        );
 
+        for (let i = 0; i < remainingGpxFiles.length; i += MAX_PARALLEL) {
+            const batch = remainingGpxFiles.slice(i, i + MAX_PARALLEL);
+
+            await Promise.all(
+                batch.map((file) => {
+                    return new Promise((resolve) => {
+                        addGPXToMap(file.url)
+                            .then(resolve)
+                            .catch((e) => {
+                                console.error(`Loading error ${file.url}:`, e);
+                                resolve();
+                            });
+                    });
+                }),
+            );
+        }
     } catch (error) {
         console.error("Erreur lors du chargement des GPX depuis S3:", error);
     }
@@ -148,21 +206,21 @@ async function loadAllGPXFromS3() {
 
 async function addGPXToMap(gpxFile, showByDefault = false) {
     try {
-        const fileName = gpxFile.split('/').pop().replace('.gpx', '');
+        const fileName = getDisplayNameFromFile(getFileNameFromPath(gpxFile));
 
         const gpxLayer = new L.GPX(gpxFile, {
             async: true,
             marker_options: {
                 startIconUrl: MapConfig.icons.start,
                 endIconUrl: MapConfig.icons.end,
-                shadowUrl: MapConfig.icons.shadow
+                shadowUrl: MapConfig.icons.shadow,
             },
             polyline_options: {
-                color: showByDefault ? '#FF0000' : getRandomColor(),
+                color: showByDefault ? "#FF0000" : getRandomColor(),
                 opacity: 0.75,
                 weight: showByDefault ? 6 : 5,
-                lineCap: 'round'
-            }
+                lineCap: "round",
+            },
         });
 
         gpxLayer.on("loaded", function (e) {
@@ -171,10 +229,7 @@ async function addGPXToMap(gpxFile, showByDefault = false) {
             updateGPXSelector();
 
             if (showByDefault) {
-                showSingleGPXTrace(fileName);
-                const radio = document.getElementById(`gpx-${fileName}`);
-                
-                if (radio) radio.checked = true;
+                setActiveGPXTrace(fileName, false);
             }
         });
     } catch (error) {
@@ -184,8 +239,8 @@ async function addGPXToMap(gpxFile, showByDefault = false) {
 }
 
 function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
+    const letters = "0123456789ABCDEF";
+    let color = "#";
     for (let i = 0; i < 6; i++) {
         color += letters[Math.floor(Math.random() * 16)];
     }
@@ -193,45 +248,55 @@ function getRandomColor() {
 }
 
 function updateGPXSelector() {
-    const selector = document.getElementById('gpx-selector-content');
+    const selector = document.getElementById("gpx-selector-content");
     if (!selector) return;
 
     selector.innerHTML = `
         <div class="gpx-selector-item">
-            <input type="radio" name="gpx-track" id="gpx-none" checked>
+            <input type="radio" name="gpx-track" id="gpx-none" ${activeGpxName ? "" : "checked"}>
             <label for="gpx-none">Aucune trace</label>
         </div>
     `;
 
-    Object.keys(gpxLayers).forEach(name => {
-        const item = document.createElement('div');
-        item.className = 'gpx-selector-item';
-        item.innerHTML = `
-            <input type="radio" name="gpx-track" id="gpx-${name}" value="${name}">
+    document.getElementById("gpx-none").addEventListener("change", (e) => {
+        if (e.target.checked) {
+            setActiveGPXTrace(null);
+        }
+    });
+
+    Object.keys(gpxLayers)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((name) => {
+            const item = document.createElement("div");
+            item.className = "gpx-selector-item";
+            item.innerHTML = `
+            <input type="radio" name="gpx-track" id="gpx-${name}" value="${name}" ${activeGpxName === name ? "checked" : ""}>
             <label for="gpx-${name}">
                 ${name}
             </label>
         `;
 
-        item.querySelector('input').addEventListener('change', (e) => {
-            if (e.target.checked) {
-                showSingleGPXTrace(name);
-            }
-        });
+            item.querySelector("input").addEventListener("change", (e) => {
+                if (e.target.checked) {
+                    setActiveGPXTrace(name);
+                }
+            });
 
-        // Hide the gpx trace
-        document.getElementById('gpx-none').addEventListener('change', (e) => {
-            if (e.target.checked) {
-                showSingleGPXTrace(null);
-            }
+            selector.appendChild(item);
         });
+}
 
-        selector.appendChild(item);
-    });
+function setActiveGPXTrace(name, syncUrl = true) {
+    activeGpxName = name;
+    showSingleGPXTrace(name);
+
+    if (syncUrl) {
+        updateSelectedFileInUrl(name);
+    }
 }
 
 function showSingleGPXTrace(name) {
-    Object.keys(gpxLayers).forEach(traceName => {
+    Object.keys(gpxLayers).forEach((traceName) => {
         if (gpxLayers[traceName]) {
             map.removeLayer(gpxLayers[traceName]);
         }
@@ -254,7 +319,7 @@ function showSingleGPXTrace(name) {
 async function updateDevicePosition(id, device) {
     try {
         const deviceResponse = await fetch(`${api_base}/devices/${id}`, {
-            headers: { Authorization: bearerToken }
+            headers: { Authorization: bearerToken },
         });
 
         if (!deviceResponse.ok) return;
@@ -262,20 +327,29 @@ async function updateDevicePosition(id, device) {
         const deviceData = await deviceResponse.json();
 
         // Checks if the device is online
-        if (deviceData.status === "unknown" || deviceData.status === "offline") {
+        if (
+            deviceData.status === "unknown" ||
+            deviceData.status === "offline"
+        ) {
             if (device.marker) map.removeLayer(device.marker);
             return;
         }
 
         // Get the position
-        const positionResponse = await fetch(`${api_base}/positions?deviceId=${id}`, {
-            headers: { Authorization: bearerToken }
-        });
+        const positionResponse = await fetch(
+            `${api_base}/positions?deviceId=${id}`,
+            {
+                headers: { Authorization: bearerToken },
+            },
+        );
 
         if (!positionResponse.ok) return;
 
         const positionData = await positionResponse.json();
-        const latLng = L.latLng(positionData[0].latitude, positionData[0].longitude);
+        const latLng = L.latLng(
+            positionData[0].latitude,
+            positionData[0].longitude,
+        );
 
         const formattedCoords = `
             <b>${device.username}</b><br>
@@ -292,7 +366,6 @@ async function updateDevicePosition(id, device) {
             device.marker.setLatLng(latLng);
             device.marker.getPopup().setContent(formattedCoords);
         }
-
     } catch (error) {
         console.error(`Error updating device ${id}:`, error);
     }
@@ -312,10 +385,9 @@ async function initApp() {
         await refreshAllPositions();
 
         setInterval(refreshAllPositions, refreshInterval);
-
     } catch (error) {
         console.error("Initialization error:", error);
     }
 }
 
-window.addEventListener('load', initApp);
+window.addEventListener("load", initApp);
