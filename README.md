@@ -63,6 +63,53 @@ const AppConfig = {
 - `s3_url`: base URL of the S3 bucket or S3-compatible storage
 - `api_base`: base URL of the tracking API
 
+### Custom S3 Configuration
+
+GeoTrack reads GPX files directly from the browser, so `s3_url` must be a public or browser-accessible base URL that supports object listing with `?list-type=2`.
+
+Example:
+
+```js
+const AppConfig = {
+    devices: {},
+    bearerToken: "Bearer <token here>",
+    s3_url: "https://my-bucket.s3.eu-central-1.amazonaws.com/gpx",
+    api_base: "https://tracking.example.com/api",
+};
+```
+
+If your GPX files are stored in a folder-like prefix, include that prefix in the URL:
+
+```js
+s3_url: "https://my-bucket.s3.eu-central-1.amazonaws.com/tracks"
+```
+
+This will make GeoTrack request:
+
+```text
+https://my-bucket.s3.eu-central-1.amazonaws.com/tracks?list-type=2
+```
+
+and load GPX files such as:
+
+```text
+https://my-bucket.s3.eu-central-1.amazonaws.com/tracks/David_20.06.26.gpx
+```
+
+You can also use S3-compatible providers if they expose a compatible HTTP endpoint, for example:
+
+- AWS S3
+- Cloudflare R2
+- MinIO
+- Wasabi
+- Backblaze B2 S3 API
+
+Make sure the endpoint is configured so the browser can:
+
+- list objects from the configured bucket or prefix
+- fetch individual `.gpx` files
+- pass CORS checks from your GeoTrack domain
+
 ### Map Config
 
 `config/map-config.js` controls:
